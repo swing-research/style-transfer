@@ -7,30 +7,35 @@ import scipy.misc as sms
 import scipy.misc as sc
 from PIL import Image
 
+img_size = 256
 
+## deep net settings
 layer_sizes = [32]
 kernel_size = [20]
 n = len(layer_sizes)
-img_size = 256
+
+## multi-scale settings
+n_channels_per_scale = 10
+# use kernels in power of 2 and l kernels of each to get enough info
+kernels = [img_size//2**i for i in range(3, int(np.log(img_size)/np.log(2)))]
+nkernels = len(kernels)
 
 
 def msnet(x):
     """Implement a shallow multi-scale convnet to capture style of an image"""
-    l = 10  # number of channels per scale
-    # use kernels in power of 2 and l kernels of each to get enough info
-    nkernels = int(np.log(img_size)/np.log(2))
-    kernels = [img_size//2**i for i in range(1, nkernels+1)]
 
     inp = tf.reshape(x, (1, img_size, img_size, 3))
     style_features = tf.stack([tf.reshape(
         layers.avg_pool2d(
-            layers.conv2d((inp), l,
+            layers.conv2d((inp), n_channels_per_scale,
                           kernel_size=kernels[i],
                           activation_fn=tf.nn.leaky_relu,
                           trainable=False,
                           reuse=tf.AUTO_REUSE,
-                          scope='style%d' % i), 2), (-1, l))
-        for i in range(nkernels)])
+                          scope='style%d' % i),
+            2),  # pool op
+        (-1, n_channels_per_scale))  # reshape op
+        for i in range(nkernels)]) # stack op
     return style_features
 
 
@@ -72,6 +77,8 @@ def getgram(image_feature):
 
 def merge(image, content, style, loss_at_level, weights=0.0):
 
+    n = len(kernels)
+
     if type(weights) != list:
         wts = [1.0/n, ]*n
     else:
@@ -105,7 +112,7 @@ def merge(image, content, style, loss_at_level, weights=0.0):
     return content_loss, style_loss
 
 
-def train(im, content, style, a=0.2, loss_at_level=-1):
+def train(im, content, style, a=0.0, loss_at_level=-1):
 
     content_loss, style_loss = merge(im, content, style, loss_at_level)
     loss = a*content_loss + (1-a)*style_loss
@@ -113,6 +120,35 @@ def train(im, content, style, a=0.2, loss_at_level=-1):
         train_step = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(loss)
 
     return train_step,  loss, content_loss, style_loss
+
+def visualize_ms(out, desc='content'):
+    nk, nf, nc = out.shape # nkernels, nfeatures, channels_per_kernel
+
+    for k in range(nk):
+        # figure out how big a canvas is needed for the feature
+        s = len(out[k,:,0])
+        s = int(np.sqrt(s))
+        ncols = 5
+        nrows = int(np.ceil(nc/float(ncols))) + 1
+
+        total_height = s*ncols + (ncols-1)*5 # 5 px gap between two outputs
+        total_width = s*nrows + (nrows-1)*5 # 5 px gap between two outputs
+
+        new_im = Image.new('P', (total_height, total_width))
+
+        for i in range(nc):
+            c = i % ncols
+            r = i//ncols
+            x_offset = c*s+5
+            y_offset = r*s+5
+            offset = (x_offset, y_offset)
+            g = out[k, :, i].reshape(s, s)
+            g = (g-g.min())/(g.max()-g.min())*255
+            im = Image.fromarray(np.uint8(g))
+            new_im.paste(im, box=offset)
+
+        new_im.save('outputs_%s_kernel%d.png' % (desc, kernels[k]) )
+
 
 
 def visualize(out, desc='content'):
@@ -122,8 +158,9 @@ def visualize(out, desc='content'):
     nrows = int(np.ceil(nc/float(ncols))) + 1
 
     s = int(np.sqrt(s))
-    total_width = s*ncols + (ncols-1)*5
-    total_height = s*nrows + (nrows-1)*5
+    # height and width are opposites in Image lib
+    total_height = s*ncols + (ncols-1)*5
+    total_width = s*nrows + (nrows-1)*5
 
     new_im = Image.new('P', (total_width, total_height))
     for i in range(nc):
@@ -140,6 +177,14 @@ def visualize(out, desc='content'):
     return
 
 
+def visualize(sess, ops, feed_dict, labels):
+    with tf.name_scope('visualize'):
+        results = sess.run(ops, feed_dict=feed_dict)
+
+    for i, result in enumerate(results):
+        visualize_ms(result, desc=labels[i])
+
+
 def style_transfer(c, s):
     """transfer style of s onto c"""
     h, w, nc = c.shape
@@ -151,25 +196,23 @@ def style_transfer(c, s):
     x = tf.Variable(tf.random_uniform((1, h, w, nc)), name='input')
 
     op_train, op_loss, op_content, op_style = train(
-        x, content, style, a=0.5, loss_at_level=-1)
-    op_c, op_s = net(content), net(style)
+        x, content, style, a=1.0, loss_at_level=-1)
+    op_c, op_s, op_x = msnet(content), msnet(style), msnet(x)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        # with tf.name_scope('visualize'):
-        #     outsc, outss = sess.run([op_c, op_s], feed_dict={
-        #         content: c, style: s})
-        #     visualize(outsc, desc='content')
-        #     visualize(outss, desc='style')
-
         with tf.name_scope('optimize'):
+            # visualize output of our content and style filters
+            visualize(sess, [op_c, op_s], {content: c, style: s}, ['content', 'style'])
 
+            # run optimization
             for ii in range(20001):
                 _, loss, closs, sloss = sess.run(
                     [op_train, op_loss, op_content, op_style],
                     feed_dict={content: c, style: s})
                 if ii % 1000 == 0 or loss < 1e-6:
+                    visualize(sess, [op_x], {}, ['variable'])
                     print("loss @ iteration %d = %f, in content = %f, in style = %f" %
                           (ii+1, loss, closs, sloss))
                     out = sess.run(x)
@@ -185,8 +228,7 @@ def main():
                           (img_size, img_size))/255.0
     style = sc.imresize(sc.imread('starry_night.jpg'),
                         (img_size, img_size))/255.0
-    # sc.imsave('content.jpg', content)
-    # sc.imsave('style.jpg', style)
+
     out = style_transfer(content, style)
     return
 
