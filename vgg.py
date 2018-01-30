@@ -125,28 +125,26 @@ class Vgg19:
 
 
 def vggnet(path, layers):
-    vgg19 = randomVgg19(vgg19_npy_path=path, layers=layers)
+    vgg19 = Vgg19(vgg19_npy_path=path, layers=layers)
     return vgg19.build
 
 
 class randVgg19(Vgg19):
 
-    def __init__(self, path="./vgg19.npy", layers=[]):
-        super.__init__(path, layers)
+    def __init__(self, vgg19_npy_path="./vgg19.npy", layers=[]):
+        Vgg19.__init__(self,vgg19_npy_path, layers)
         self.sizes = [64, 128, 256, 512, 512]
         self.layers = layers
 
     def conv_layer(self, bottom, name):
         with tf.variable_scope(name):
-            blockid = int(name[-3])
-            out = tf.contrib.layers.conv2d(bottom, self.sizes[block],
-                                           kernel_size=kernels[i],
+            blockid = int(name[-3])-1
+            out = tf.contrib.layers.conv2d(bottom, self.sizes[blockid],
+                                           kernel_size=3,
                                            padding="same",
                                            activation_fn=tf.nn.relu,
                                            trainable=False,
-                                           reuse=tf.AUTO_REUSE,
                                            biases_initializer=tf.random_uniform_initializer(
-                maxval=0.1),
-                scope='conv%d' % i)
+                maxval=0.1))
 
             return out

@@ -109,7 +109,7 @@ def merge(image, content, style, loss_at_level, nn):
 
 
 def train(loss):
-    return tf.train.AdamOptimizer(learning_rate=1e-1).minimize(loss)
+    return tf.train.AdamOptimizer(learning_rate=5e-1).minimize(loss)
 
 
 def visualize(out, desc='content'):
@@ -216,7 +216,7 @@ def main():
     #                     (img_size, img_size))/255.0
     sc.imsave('style.jpg', style)
 
-    out = style_transfer(content, style, nn=NET, mix=(1, 100, 0.001))
+    out = style_transfer(content, style, nn=NET, mix=(7.5, 1000, 0.001))
     return
 
 if __name__ == '__main__':

@@ -27,6 +27,12 @@ As with all things in deep learning, it turns out [He *et al*](https://arxiv.org
 
 ![content.jpg](./content.jpg)
 ![style.jpg](./style.jpg)
-![output.jpg](./output.jpg)
+![output.jpg](./Vgg19_output.jpg)
+
+## Results with random VGG
+
+![content.jpg](./content.jpg)
+![style.jpg](./style.jpg)
+![output.jpg](./randVgg19_output.jpg)
 
 -- these results do not represent the power of the method. I was just lazy to get good results from this as it involves a lot of hyperparameter tuning which is not very interesting.
