@@ -28,3 +28,5 @@ As with all things in deep learning, it turns out [He *et al*](https://arxiv.org
 ![content.jpg](./content.jpg)
 ![style.jpg](./style.jpg)
 ![output.jpg](./output.jpg)
+
+-- these results do not represent the power of the method. I was just lazy to get good results from this as it involves a lot of hyperparameter tuning which is not very interesting.
