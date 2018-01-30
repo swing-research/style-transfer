@@ -2,6 +2,7 @@
 
 import tensorflow as tf
 import tensorflow.contrib.layers as l
+from tensorflow.python.client import timeline
 import numpy as np
 import scipy.misc as sc
 from PIL import Image
@@ -21,7 +22,7 @@ N_LAYERS = 2
 # ## multi-scale settings
 n_channels_per_scale = 20
 # use kernels in power of 2 and l kernels of each to get enough info
-kernels = [33,17,9,5]
+kernels = [33, 17, 9, 5]
 nkernels = len(kernels)
 
 
@@ -31,20 +32,22 @@ def msnet(x):
     features = tf.stack([tf.reshape(
         l.avg_pool2d(
             l.conv2d(x, n_channels_per_scale,
-                          padding = "same",
-                          kernel_size=kernels[i],
-                          activation_fn=tf.nn.leaky_relu,
-                          trainable=False,
-                          biases_initializer=tf.random_uniform_initializer(maxval=0.1),
-                          reuse=tf.AUTO_REUSE,
-                          scope='style%d' % i),
+                     padding="same",
+                     kernel_size=kernels[i],
+                     activation_fn=tf.nn.leaky_relu,
+                     trainable=False,
+                     biases_initializer=tf.random_uniform_initializer(
+                         maxval=0.1),
+                     reuse=tf.AUTO_REUSE,
+                     scope='style%d' % i),
             2),  # pool op
         (3, -1, n_channels_per_scale))  # reshape op
-        for i in range(nkernels)]) # stack op
-    
-    features=tf.transpose(features, (1,2,3,0))
+        for i in range(nkernels)])  # stack op
+
+    features = tf.transpose(features, (1, 2, 3, 0))
 
     return tf.reshape(features, (3, -1, n_channels_per_scale*nkernels))
+
 
 def net(x):
     """ Neural net for style and content representations
@@ -55,13 +58,13 @@ def net(x):
     out = x
     for i, nc in enumerate(layer_sizes):
         out = l.conv2d(out, nc, kernel_size=kernels[i],
-                            padding="same",
-                            activation_fn=tf.nn.leaky_relu,
-                            trainable=False,
-                            reuse=tf.AUTO_REUSE,
-                            biases_initializer=tf.random_uniform_initializer(
-                                maxval=1/sum(layer_sizes[i:i+2])),
-                            scope='conv%d' % i)
+                       padding="same",
+                       activation_fn=tf.nn.leaky_relu,
+                       trainable=False,
+                       reuse=tf.AUTO_REUSE,
+                       biases_initializer=tf.random_uniform_initializer(
+            maxval=1/sum(layer_sizes[i:i+2])),
+            scope='conv%d' % i)
         out = l.avg_pool2d(out, 2)
         outs.append(tf.reshape(out, (3, -1, nc)))
 
@@ -77,13 +80,12 @@ def merge(image, content, style, loss_at_level, nn):
     with tf.name_scope('apply_nn'):
         outputs = nn(tf.stack((content, style, image)))
 
-    
     with tf.name_scope('merge'):
         content_loss = style_loss = 0
 
-        if nn.__name__!='msnet':
+        if nn.__name__ != 'msnet':
 
-            content_loss = tf.nn.l2_loss(outputs[0][0] - outputs[0][2])
+            # content_loss = tf.nn.l2_loss(outputs[0][0] - outputs[0][2])
             # use for loop
             for i in range(N_LAYERS):
                 print(outputs[i].get_shape().as_list())
@@ -92,14 +94,23 @@ def merge(image, content, style, loss_at_level, nn):
                 outx = outputs[i][2]
                 N1, N2 = outc.get_shape().as_list()
 
-                # content_loss += tf.nn.l2_loss(outc-outx)
+                # weights idea taken from https://arxiv.org/pdf/1606.04801.pdf
+                weight_inv = tf.abs(tf.reduce_sum(tf.gradients(outx, image)))/(3*img_size*img_size)
+                weight = 1.0/weight_inv
+
+                content_loss += weight*tf.nn.l2_loss(outc-outx)
                 Gs = getgram(outs)
                 Gx = getgram(outx)
-                style_loss += tf.nn.l2_loss(Gs-Gx) / (2*N1*N1*N2*N2)
+                gram_l2 = tf.nn.l2_loss(Gs-Gx) / (N1*N2)
+                weight_inv = tf.abs(tf.reduce_sum(
+                    tf.gradients(gram_l2, image)))/(3*img_size*img_size)
+                weight = 1.0/weight_inv
+                style_loss += weight*tf.nn.l2_loss(Gs-Gx) / (N1*N2)
 
         else:
-            outc, outs, outx = tf.split(axis=0, num_or_size_splits=3, value=outputs)
-            _, N1, N2 = outc.get_shape().as_list() # gets size 1 axis 0
+            outc, outs, outx = tf.split(
+                axis=0, num_or_size_splits=3, value=outputs)
+            _, N1, N2 = outc.get_shape().as_list()  # gets size 1 axis 0
             content_loss += tf.nn.l2_loss(outc-outx)
             Gs = getgram(outs)
             Gx = getgram(outx)
@@ -109,7 +120,7 @@ def merge(image, content, style, loss_at_level, nn):
 
 
 def train(loss):
-    return tf.train.AdamOptimizer(learning_rate=5e-1).minimize(loss)
+    return tf.train.AdamOptimizer(learning_rate=1e-2).minimize(loss)
 
 
 def visualize(out, desc='content'):
@@ -169,6 +180,9 @@ def style_transfer(c, s, nn=vggnet, mix=(10, 100, 1)):
     loss = mix[0]*lc + mix[1]*ls + mix[2]*tf.image.total_variation(x)
     train_step = train(loss)
 
+    options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+    run_metadata = tf.RunMetadata()
+
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
@@ -178,16 +192,24 @@ def style_transfer(c, s, nn=vggnet, mix=(10, 100, 1)):
             for ii in range(50001):
                 closs, sloss, tloss, _, _ = sess.run(
                     [lc, ls, loss, outs, train_step],
-                    feed_dict={content: c, style: s})
+                    feed_dict={content: c, style: s},
+                    options=options,
+                    run_metadata=run_metadata)
                 if ii % 1000 == 0 or tloss < 1e-6:
 
-                    print("loss @ iteration %d = %f, in content = %f, in style = %f" %
+                    print("loss @ iteration %d = %1.2e, in content = %1.2e, in style = %1.2e" %
                           (ii+1, tloss, closs, sloss))
 
                     out = sess.run(x)
                     sc.imsave('output.jpg', out.reshape(h, w, nc))
                     if tloss < 1e-6:
                         break
+
+     # Create the Timeline object, and write it to a json file
+    fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+    chrome_trace = fetched_timeline.generate_chrome_trace_format()
+    with open('timeline_01.json', 'w') as f:
+        f.write(chrome_trace)
 
     return out
 
@@ -216,7 +238,7 @@ def main():
     #                     (img_size, img_size))/255.0
     sc.imsave('style.jpg', style)
 
-    out = style_transfer(content, style, nn=NET, mix=(7.5, 1000, 0.001))
+    out = style_transfer(content, style, nn=NET, mix=(7.5, 5000, 0.001))
     return
 
 if __name__ == '__main__':
