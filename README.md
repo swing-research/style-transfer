@@ -23,3 +23,8 @@ Reconstruction works very well, with just the SSE loss amongst the final non-lin
 
 As with all things in deep learning, it turns out [He *et al*](https://arxiv.org/abs/1606.04801) have already published results with random deep CNNs doing exactly what I am trying in this repo. In fact, these results are much better than my attempts, hence, I will read their report and update on what they do different than what I thought.
 
+## Results with pretrained VGG
+
+![content.jpg](./content.jpg)
+![style.jpg](./style.jpg)
+![output.jpg](./output.jpg)
