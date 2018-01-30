@@ -18,7 +18,7 @@ class Vgg19:
             vgg19_npy_path = path
             print(vgg19_npy_path)
 
-       	self.layers = layers
+        self.layers = layers
         self.data_dict = np.load(vgg19_npy_path, encoding='latin1').item()
 
         print("npy file loaded")
@@ -75,22 +75,22 @@ class Vgg19:
 
         self.ops = []
 
-    	for val in self.layers:
-    		if val == 1:
-    			a, b, c, d = self.conv1_2.get_shape().as_list()
-    			self.ops.append(tf.reshape(self.conv1_2, (a, b*c, d)))
-    		elif val == 2:
-    			a, b, c, d = self.conv2_2.get_shape().as_list()
-    			self.ops.append(tf.reshape(self.conv2_2, (a, b*c, d)))
-    		elif val == 3:
-    			a, b, c, d = self.conv3_4.get_shape().as_list()
-    			self.ops.append(tf.reshape(self.conv3_4, (a, b*c, d)))
-    		elif val == 4:
-    			a, b, c, d = self.conv4_4.get_shape().as_list()
-    			self.ops.append(tf.reshape(self.conv4_4, (a, b*c, d)))
-    		elif val == 5:
-    			a, b, c, d = self.conv5_4.get_shape().as_list()
-    			self.ops.append(tf.reshape(self.conv5_4, (a, b*c, d)))
+        for val in self.layers:
+            if val == 1:
+                a, b, c, d = self.conv1_2.get_shape().as_list()
+                self.ops.append(tf.reshape(self.conv1_2, (a, b*c, d)))
+            elif val == 2:
+                a, b, c, d = self.conv2_2.get_shape().as_list()
+                self.ops.append(tf.reshape(self.conv2_2, (a, b*c, d)))
+            elif val == 3:
+                a, b, c, d = self.conv3_4.get_shape().as_list()
+                self.ops.append(tf.reshape(self.conv3_4, (a, b*c, d)))
+            elif val == 4:
+                a, b, c, d = self.conv4_4.get_shape().as_list()
+                self.ops.append(tf.reshape(self.conv4_4, (a, b*c, d)))
+            elif val == 5:
+                a, b, c, d = self.conv5_4.get_shape().as_list()
+                self.ops.append(tf.reshape(self.conv5_4, (a, b*c, d)))
 
         print(("build model finished: %ds" % (time.time() - start_time)))
 
@@ -125,27 +125,28 @@ class Vgg19:
 
 
 def vggnet(path, layers):
-	vgg19 = Vgg19(vgg19_npy_path=path, layers=layers)
-	return vgg19.build
+    vgg19 = randomVgg19(vgg19_npy_path=path, layers=layers)
+    return vgg19.build
 
 
 class randVgg19(Vgg19):
 
-	def __init__(self, path="./vgg19.npy", layers=[]):
-		super.__init__(path, layers)
-		self.sizes = [64, 128, 256, 512, 512]
-		self.layers = layers
+    def __init__(self, path="./vgg19.npy", layers=[]):
+        super.__init__(path, layers)
+        self.sizes = [64, 128, 256, 512, 512]
+        self.layers = layers
 
-	def conv_layer(self, bottom, name):
+    def conv_layer(self, bottom, name):
         with tf.variable_scope(name):
-        	blockid = int(name[-3])
-            out = tf.contrib.layers.conv2d(bottom, self.sizes[block],kernel_size=kernels[i],
-                            padding="same",
-                            activation_fn=tf.nn.relu,
-                            trainable=False,
-                            reuse=tf.AUTO_REUSE,
-                            biases_initializer=tf.random_uniform_initializer(
-                                maxval=0.1),
-                            scope='conv%d' % i)
+            blockid = int(name[-3])
+            out = tf.contrib.layers.conv2d(bottom, self.sizes[block],
+                                           kernel_size=kernels[i],
+                                           padding="same",
+                                           activation_fn=tf.nn.relu,
+                                           trainable=False,
+                                           reuse=tf.AUTO_REUSE,
+                                           biases_initializer=tf.random_uniform_initializer(
+                maxval=0.1),
+                scope='conv%d' % i)
 
             return out
